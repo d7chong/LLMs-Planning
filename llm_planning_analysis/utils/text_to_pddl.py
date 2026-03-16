@@ -256,13 +256,13 @@ no plan possible
     ]
     if "raw_translation" not in instance_dict:
         max_token_err_flag = False
+        response = None
         try:
-            response = client.chat.completions.create(model=eng, messages=messages)#, temperature=params['temperature'])
+            response = client.chat.completions.create(model=eng, messages=messages)
         except Exception as e:
             max_token_err_flag = True
             print("[-]: Failed GPT3 query execution: {}".format(e))
-            time.sleep(3000)
-        text_response = response.choices[0].message.content if not max_token_err_flag else "" 
+        text_response = response.choices[0].message.content if not max_token_err_flag and response is not None else "" 
     else:
         text_response = instance_dict["raw_translation"]
     if "[PDDL PLAN]" in text_response:

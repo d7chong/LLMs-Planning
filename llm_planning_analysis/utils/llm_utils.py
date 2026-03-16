@@ -66,6 +66,7 @@ def _resolve_api_key(engine, engine_cfg):
 def _get_chat_client_and_model(engine):
     engine_cfg = _resolve_engine_config(engine)
     if engine_cfg is None:
+        print(f"[llm_utils] engine={engine} using default OpenAI client model={engine.split('_')[0]}")
         return client, engine.split("_")[0], {}
 
     base_url = engine_cfg.get("base_url")
@@ -74,6 +75,7 @@ def _get_chat_client_and_model(engine):
         raise ValueError(f"Engine config for {engine} must define base_url and model")
 
     api_key = _resolve_api_key(engine, engine_cfg)
+    print(f"[llm_utils] engine={engine} base_url={base_url} model={model_name}")
     compat_client = OpenAI(api_key=api_key, base_url=base_url)
     return compat_client, model_name, engine_cfg
 
@@ -215,11 +217,15 @@ def send_query(query, engine, max_tokens, model=None, stop="[STATEMENT]", params
     elif '_chat' in engine:
         compat_client, eng, engine_cfg = _get_chat_client_and_model(engine)
         messages = _default_messages(query, engine, engine_cfg)
+        response = None
+        time_taken = 0
         try:
+            print(f"[llm_utils] sending chat request engine={engine} model={eng} query_chars={len(query)}")
             s_time = time.time()
             request_args = {
                 "model": eng,
                 "messages": messages,
+                "max_tokens": max_tokens,
             }
             if len(messages) > 1:
                 request_args["temperature"] = params['temperature']
@@ -229,10 +235,10 @@ def send_query(query, engine, max_tokens, model=None, stop="[STATEMENT]", params
         except Exception as e:
             max_token_err_flag = True
             print("[-]: Failed GPT3 query execution: {}".format(e))
-            time.sleep(3000)
-        text_response = response.choices[0].message.content if not max_token_err_flag else "" 
+        text_response = response.choices[0].message.content if not max_token_err_flag and response is not None else "" 
         # print(response)
-        print(response.usage)
+        if response is not None:
+            print(response.usage)
         # print(response.usage.completion_tokens_details["reasoning_tokens"])
         return text_response.strip(), response, time_taken
     elif '_groq' in engine:

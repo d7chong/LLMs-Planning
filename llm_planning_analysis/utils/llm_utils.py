@@ -100,6 +100,31 @@ def _default_messages(query, engine, engine_cfg=None):
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query},
     ]
+
+
+def _extract_chat_text(response):
+    if response is None or not getattr(response, "choices", None):
+        return ""
+    message = response.choices[0].message
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif hasattr(item, "text") and item.text:
+                parts.append(item.text)
+            elif isinstance(item, dict) and item.get("text"):
+                parts.append(item["text"])
+        return "".join(parts)
+    reasoning_content = getattr(message, "reasoning_content", "")
+    if isinstance(reasoning_content, str):
+        return reasoning_content
+    return ""
+
+
 def generate_from_bloom(model, tokenizer, query, max_tokens):
     encoded_input = tokenizer(query, return_tensors='pt')
     stop = tokenizer("[PLAN END]", return_tensors='pt')
@@ -235,7 +260,7 @@ def send_query(query, engine, max_tokens, model=None, stop="[STATEMENT]", params
         except Exception as e:
             max_token_err_flag = True
             print("[-]: Failed GPT3 query execution: {}".format(e))
-        text_response = response.choices[0].message.content if not max_token_err_flag and response is not None else "" 
+        text_response = _extract_chat_text(response) if not max_token_err_flag else ""
         # print(response)
         if response is not None:
             print(response.usage)
@@ -253,7 +278,7 @@ def send_query(query, engine, max_tokens, model=None, stop="[STATEMENT]", params
         except Exception as e:
             max_token_err_flag = True
             print("[-]: Failed GPT3 query execution: {}".format(e))
-        text_response = response.choices[0].message.content if not max_token_err_flag else ""
+        text_response = _extract_chat_text(response) if not max_token_err_flag else ""
         time.sleep(2)
         return text_response.strip()
     elif '_aws' in engine:
@@ -382,7 +407,7 @@ def send_query_multiple(query, engine, max_tokens, params, model=None, stop="[ST
                 if len(messages) > 1:
                     request_args["temperature"] = params['temperature']
                 response = compat_client.chat.completions.create(**request_args)
-                text_responses[total_responses] = response.choices[0].message.content
+                text_responses[total_responses] = _extract_chat_text(response)
             except Exception as e:
                 if 'Request timed out' in str(e):
                     time.sleep(1)
@@ -467,7 +492,7 @@ def send_query_with_feedback(query, engine, messages=[], history=-1, temp=0):
                 context_window_hit = True
             print("[-]: Failed GPT3 query execution: {}".format(e))
             st, et = 0, 0
-        text_response = "" if err_flag else response.choices[0].message.content
+        text_response = "" if err_flag else _extract_chat_text(response)
         if not text_response or text_response.isspace():
             null_response = True
             text_response = ""
@@ -487,7 +512,7 @@ def send_query_with_feedback(query, engine, messages=[], history=-1, temp=0):
             print("[-]: Failed DeepSeek query execution: {}".format(e))
             st, et = 0, 0 
             response = None
-        text_response = "" if err_flag else response.choices[0].message.content
+        text_response = "" if err_flag else _extract_chat_text(response)
         if not text_response or text_response.isspace():
             null_response = True
             text_response = ""

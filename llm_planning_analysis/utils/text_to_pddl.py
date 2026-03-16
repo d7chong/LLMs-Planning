@@ -41,6 +41,29 @@ def _get_translation_client_and_model(engine):
     return OpenAI(api_key=api_key, base_url=base_url), model_name
 
 
+def _extract_chat_text(response):
+    if response is None or not getattr(response, "choices", None):
+        return ""
+    message = response.choices[0].message
+    content = getattr(message, "content", "")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif hasattr(item, "text") and item.text:
+                parts.append(item.text)
+            elif isinstance(item, dict) and item.get("text"):
+                parts.append(item["text"])
+        return "".join(parts)
+    reasoning_content = getattr(message, "reasoning_content", "")
+    if isinstance(reasoning_content, str):
+        return reasoning_content
+    return ""
+
+
 def get_ordered_objects(object_names, line):
     objs = []
     pos = []
@@ -262,7 +285,7 @@ no plan possible
         except Exception as e:
             max_token_err_flag = True
             print("[-]: Failed GPT3 query execution: {}".format(e))
-        text_response = response.choices[0].message.content if not max_token_err_flag and response is not None else "" 
+        text_response = _extract_chat_text(response) if not max_token_err_flag else ""
     else:
         text_response = instance_dict["raw_translation"]
     if "[PDDL PLAN]" in text_response:

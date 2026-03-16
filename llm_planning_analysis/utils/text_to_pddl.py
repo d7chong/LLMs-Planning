@@ -42,25 +42,45 @@ def _get_translation_client_and_model(engine):
 
 
 def _extract_chat_text(response):
+    def _coerce_content(value):
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            parts = []
+            for item in value:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif hasattr(item, "text") and item.text:
+                    parts.append(item.text)
+                elif isinstance(item, dict):
+                    text = item.get("text") or item.get("content")
+                    if text:
+                        parts.append(text)
+            return "".join(parts)
+        return ""
+
     if response is None or not getattr(response, "choices", None):
         return ""
     message = response.choices[0].message
-    content = getattr(message, "content", "")
-    if isinstance(content, str):
+    content = _coerce_content(getattr(message, "content", ""))
+    if content:
         return content
-    if isinstance(content, list):
-        parts = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif hasattr(item, "text") and item.text:
-                parts.append(item.text)
-            elif isinstance(item, dict) and item.get("text"):
-                parts.append(item["text"])
-        return "".join(parts)
     reasoning_content = getattr(message, "reasoning_content", "")
-    if isinstance(reasoning_content, str):
+    if isinstance(reasoning_content, str) and reasoning_content:
         return reasoning_content
+    if hasattr(message, "model_dump"):
+        dumped = message.model_dump()
+        content = _coerce_content(dumped.get("content"))
+        if content:
+            return content
+        reasoning_content = _coerce_content(dumped.get("reasoning_content"))
+        if reasoning_content:
+            return reasoning_content
+        for key, value in dumped.items():
+            if key not in {"role", "content", "reasoning_content", "tool_calls"}:
+                text = _coerce_content(value)
+                if text:
+                    return text
     return ""
 
 

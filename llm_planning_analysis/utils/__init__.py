@@ -257,6 +257,8 @@ def validate_plan_unsolvable(llm_plan):
 
 def validate_plan(domain, instance, plan_file):
     val_path = os.getenv("VAL")
+    if not val_path:
+        raise EnvironmentError("VAL is not set. Export VAL=/path/to/VAL before running evaluation.")
     cmd = f"{val_path}/validate {domain} {instance} {plan_file}"
     response = os.popen(cmd).read()
     if 'Problem in domain' in response:

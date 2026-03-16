@@ -95,7 +95,14 @@ if __name__=="__main__":
 
 
     # ========================= Response Evaluation =========================
-    response_evaluator = ResponseEvaluator(config_file, engine, specified_instances, verbose, ignore_existing)
+    response_evaluator = ResponseEvaluator(
+        config_file,
+        engine,
+        specified_instances,
+        verbose,
+        ignore_existing,
+        translator_engine,
+    )
     eval_plan_dict = {
         't1': 'task_1_plan_generation',
         't1_zero': 'task_1_plan_generation_zero_shot',
@@ -120,5 +127,4 @@ if __name__=="__main__":
         except:
             raise ValueError("Invalid task name")
         response_evaluator.evaluate_plan_pddl(task_name)
-
 

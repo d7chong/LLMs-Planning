@@ -9,6 +9,7 @@
 */rough.py
 */sas_plan_ver
 utils/__pycache__/*
+*.pyc
 
 
 llm_planning_analysis/configs/mystery_blocksworld_with_mapping.yaml

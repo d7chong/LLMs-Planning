@@ -26,6 +26,78 @@ config = Config(read_timeout=1000)
 
 aws_client = boto3.client('bedrock-runtime', region_name='us-west-2', config=config)
 client = OpenAI()
+
+
+def _load_openai_compatible_engines():
+    raw_config = os.getenv("OPENAI_COMPATIBLE_ENGINES", "").strip()
+    if not raw_config:
+        return {}
+    try:
+        config = json.loads(raw_config)
+    except json.JSONDecodeError as exc:
+        raise ValueError("OPENAI_COMPATIBLE_ENGINES must be valid JSON") from exc
+    if not isinstance(config, dict):
+        raise ValueError("OPENAI_COMPATIBLE_ENGINES must decode to a JSON object")
+    return config
+
+
+def _resolve_engine_config(engine):
+    compat_engines = _load_openai_compatible_engines()
+    if engine in compat_engines:
+        cfg = compat_engines[engine]
+        if not isinstance(cfg, dict):
+            raise ValueError(f"Engine config for {engine} must be a JSON object")
+        return cfg
+    return None
+
+
+def _resolve_api_key(engine, engine_cfg):
+    api_key = engine_cfg.get("api_key")
+    if api_key:
+        return api_key
+    api_key_env = engine_cfg.get("api_key_env")
+    if api_key_env:
+        return os.environ[api_key_env]
+    if engine.endswith("_chat"):
+        return os.environ.get("OPENAI_API_KEY")
+    return None
+
+
+def _get_chat_client_and_model(engine):
+    engine_cfg = _resolve_engine_config(engine)
+    if engine_cfg is None:
+        return client, engine.split("_")[0], {}
+
+    base_url = engine_cfg.get("base_url")
+    model_name = engine_cfg.get("model")
+    if not base_url or not model_name:
+        raise ValueError(f"Engine config for {engine} must define base_url and model")
+
+    api_key = _resolve_api_key(engine, engine_cfg)
+    compat_client = OpenAI(api_key=api_key, base_url=base_url)
+    return compat_client, model_name, engine_cfg
+
+
+def _default_messages(query, engine, engine_cfg=None):
+    engine_cfg = engine_cfg or {}
+    omit_system_prompt = engine_cfg.get("omit_system_prompt", False)
+    if (
+        omit_system_prompt
+        or "o1-preview" in engine
+        or "o1-mini" in engine
+        or "deepseek-r1" in engine
+        or "gemini-2.5-thinking" in engine
+    ):
+        return [{"role": "user", "content": query}]
+
+    system_prompt = engine_cfg.get(
+        "system_prompt",
+        "You are the planner assistant who comes up with correct plans.",
+    )
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": query},
+    ]
 def generate_from_bloom(model, tokenizer, query, max_tokens):
     encoded_input = tokenizer(query, return_tensors='pt')
     stop = tokenizer("[PLAN END]", return_tensors='pt')
@@ -141,16 +213,17 @@ def send_query(query, engine, max_tokens, model=None, stop="[STATEMENT]", params
         else:
             assert model is not None
     elif '_chat' in engine:
-        # gpt-4-turbo-2024-04-09
-        eng = engine.split('_')[0]
-        # print('chatmodels', eng)
-        messages=[
-        # {"role": "system", "content": "You are a planner assistant who comes up with correct plans."},
-        {"role": "user", "content": query}
-        ]
+        compat_client, eng, engine_cfg = _get_chat_client_and_model(engine)
+        messages = _default_messages(query, engine, engine_cfg)
         try:
             s_time = time.time()
-            response = client.chat.completions.create(model=eng, messages=messages)#, temperature=params['temperature'])
+            request_args = {
+                "model": eng,
+                "messages": messages,
+            }
+            if len(messages) > 1:
+                request_args["temperature"] = params['temperature']
+            response = compat_client.chat.completions.create(**request_args)
             e_time = time.time()
             time_taken = e_time - s_time
         except Exception as e:
@@ -290,18 +363,19 @@ def send_query_multiple(query, engine, max_tokens, params, model=None, stop="[ST
         else:
             assert model is not None
     elif '_chat' in engine:
-        
-        eng = engine.split('_')[0]
-        # print('chatmodels', eng)
+        compat_client, eng, engine_cfg = _get_chat_client_and_model(engine)
         text_responses = {}
         total_responses = 0
         while total_responses < params['n']:
-            messages=[
-            {"role": "system", "content": "You are the planner assistant who comes up with correct plans."},
-            {"role": "user", "content": query}
-            ]
+            messages = _default_messages(query, engine, engine_cfg)
             try:
-                response = client.chat.completions.create(model=eng, messages=messages, temperature=params['temperature'])
+                request_args = {
+                    "model": eng,
+                    "messages": messages,
+                }
+                if len(messages) > 1:
+                    request_args["temperature"] = params['temperature']
+                response = compat_client.chat.completions.create(**request_args)
                 text_responses[total_responses] = response.choices[0].message.content
             except Exception as e:
                 if 'Request timed out' in str(e):
@@ -344,19 +418,10 @@ def send_query_with_feedback(query, engine, messages=[], history=-1, temp=0):
     context_window_hit = False
     rate_limit_hit = False
     null_response = False
+    engine_cfg = _resolve_engine_config(engine) or {}
     
     if len(messages) == 0:
-        # Add if for all models
-        if "o1-preview" in engine or "o1-mini" in engine or "deepseek-r1" in engine or "gemini-2.5-thinking" in engine:
-            messages=[
-        # {"role": "system", "content": "You are the planner assistant who comes up with correct plans."},
-        {"role": "user", "content": query}
-        ]
-        else:
-            messages=[
-        {"role": "system", "content": "You are the planner assistant who comes up with correct plans."},
-        {"role": "user", "content": query}
-        ]
+        messages = _default_messages(query, engine, engine_cfg)
     else:
         #Just for validation message - query consists of the validation message
         messages.append({"role": "user", "content": query})
@@ -379,17 +444,16 @@ def send_query_with_feedback(query, engine, messages=[], history=-1, temp=0):
         # temp = 0
     # print('sending_messages', sending_messages)
     if '_chat' in engine:
-        eng = engine.split('_')[0]
-        # print('chatmodels', eng)
+        compat_client, eng, engine_cfg = _get_chat_client_and_model(engine)
         
         try:
-            if "o1-" in eng:
+            if "o1-" in eng or engine_cfg.get("omit_system_prompt", False):
                 st = time.time()
-                response = client.chat.completions.create(model=eng, messages=sending_messages)
+                response = compat_client.chat.completions.create(model=eng, messages=sending_messages)
                 et = time.time()
             else:
                 st = time.time()
-                response = client.chat.completions.create(model=eng, messages=sending_messages, temperature=temp)
+                response = compat_client.chat.completions.create(model=eng, messages=sending_messages, temperature=temp)
                 et = time.time()
         except Exception as e: 
             err_flag = True

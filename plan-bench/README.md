@@ -78,6 +78,35 @@ The engines are not limited to the ones listed below.
   - Just specify the LLM name
     - bloom etc.
 
+- OpenAI-compatible chat backends:
+  - You can map any engine name to an OpenAI-compatible endpoint, which is the easiest way to add vLLM-served models such as Qwen without modifying each eval task.
+  - Set `OPENAI_COMPATIBLE_ENGINES` to a JSON object keyed by the engine name you want to pass to `--engine`.
+  - Each engine config must define:
+    - `base_url`: OpenAI-compatible `/v1` endpoint
+    - `model`: remote model id
+  - Optional fields:
+    - `api_key`: literal API key
+    - `api_key_env`: env var name to read the API key from
+    - `omit_system_prompt`: set to `true` if your served model should only receive user messages
+    - `system_prompt`: override the default planner system prompt
+  - Example:
+```bash
+export VLLM_API_KEY=token-abc123
+export OPENAI_COMPATIBLE_ENGINES='{
+  "qwen3_chat": {
+    "base_url": "http://localhost:8000/v1",
+    "model": "Qwen/Qwen3-32B",
+    "api_key_env": "VLLM_API_KEY"
+  },
+  "qwen3.5_chat": {
+    "base_url": "http://localhost:8000/v1",
+    "model": "Qwen/Qwen3.5-32B",
+    "api_key_env": "VLLM_API_KEY"
+  }
+}'
+python3 llm_plan_pipeline.py --task t1 --config blocksworld --engine qwen3_chat
+```
+
 For BLOOM:
 - Assign the cache dir of the model to the environment variable BLOOM_CACHE_DIR `BLOOM_CACHE_DIR=/path/to/bloom/cache/dir`
   
@@ -142,4 +171,3 @@ Optional arguments:
 4. For the Plan Generalization task, you have to generate a specific set of instances and add the path of that directory in the yaml file.
 5. For the Replanning task, if you want to perform a specific type of replanning, you have to add that in replanning_domain_specific function in the Executor/\_\_init\_\_.py file. Make sure that the domain name is the same as the domain name in the yaml file.
 6. Voila! Run PlanBench on the new domain.
-

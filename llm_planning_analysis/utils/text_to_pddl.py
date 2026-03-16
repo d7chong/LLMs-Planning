@@ -1,6 +1,46 @@
 import numpy as np 
 from openai import OpenAI
 import time
+import os
+import json
+
+
+def _load_openai_compatible_engines():
+    raw_config = os.getenv("OPENAI_COMPATIBLE_ENGINES", "").strip()
+    if not raw_config:
+        return {}
+    try:
+        config = json.loads(raw_config)
+    except json.JSONDecodeError as exc:
+        raise ValueError("OPENAI_COMPATIBLE_ENGINES must be valid JSON") from exc
+    if not isinstance(config, dict):
+        raise ValueError("OPENAI_COMPATIBLE_ENGINES must decode to a JSON object")
+    return config
+
+
+def _get_translation_client_and_model(engine):
+    engine_cfg = _load_openai_compatible_engines().get(engine)
+    if engine_cfg is None:
+        return OpenAI(), engine
+
+    if not isinstance(engine_cfg, dict):
+        raise ValueError(f"Engine config for {engine} must be a JSON object")
+
+    base_url = engine_cfg.get("base_url")
+    model_name = engine_cfg.get("model")
+    if not base_url or not model_name:
+        raise ValueError(f"Engine config for {engine} must define base_url and model")
+
+    api_key = engine_cfg.get("api_key")
+    api_key_env = engine_cfg.get("api_key_env")
+    if api_key is None and api_key_env:
+        api_key = os.environ[api_key_env]
+    if api_key is None:
+        api_key = os.environ.get("OPENAI_API_KEY")
+
+    return OpenAI(api_key=api_key, base_url=base_url), model_name
+
+
 def get_ordered_objects(object_names, line):
     objs = []
     pos = []
@@ -208,9 +248,8 @@ no plan possible
 [PDDL PLAN END]
 """
 
-    eng = translator_engine
+    client, eng = _get_translation_client_and_model(translator_engine)
     query = f"{TRANSLATION_PROMPT}\n\n[RAW TEXT]\n{text}\n\n[PDDL PLAN]"
-    client = OpenAI()
     messages=[
         # {"role": "system", "content": "You are a planner assistant who comes up with correct plans."},
     {"role": "user", "content": query}

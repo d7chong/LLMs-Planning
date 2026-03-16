@@ -32,7 +32,7 @@ python3 llm_plan_pipeline.py --task TASK --config CONFIG --engine ENGINE [--igno
 4. --random_example: If set to True, the example instance for each task will be randomly chosen from the set of instances. If set to False, the previous instance id will be used for the example prompt. Default is False.
 5. --verbose: If set to True, the pipeline will print the prompts, responses and evaluation. Default is False.
 6. --seed: The seed to use for randomization. Default is 42.
-7. --translator_engine: The name of the engine to use for translation. Default is gpt-4o. Support to non-OpenAI models is not yet implemented.
+7. --translator_engine: The name of the engine to use for translation. Default is gpt-4o. This can also be an `OPENAI_COMPATIBLE_ENGINES` alias, so you can use the same vLLM-hosted Qwen model for extraction/evaluation.
 8. --no_llm_based_extraction: If set to True, the pipeline will not use LLM based translation. Default is False.
 9. --max_workers: The number of parallel calls to make. Default is 1.
 
@@ -72,6 +72,35 @@ The engines are not limited to the ones listed below.
 - Other LLMs (currently supported: BLOOM):
   - Just specify the LLM name
     - bloom etc.
+
+- OpenAI-compatible chat backends:
+  - You can map any engine name to an OpenAI-compatible endpoint, which is the easiest way to add newer hosted or self-served models such as Qwen without rewriting the eval pipeline.
+  - Set `OPENAI_COMPATIBLE_ENGINES` to a JSON object keyed by the engine name you want to pass to `--engine`.
+  - Each engine config must define:
+    - `base_url`: OpenAI-compatible `/v1` endpoint
+    - `model`: remote model id
+  - Optional fields:
+    - `api_key`: literal API key
+    - `api_key_env`: env var name to read the API key from
+    - `omit_system_prompt`: set to `true` for reasoning-style models that should not receive a system message
+    - `system_prompt`: override the default planner system prompt
+  - Example:
+```bash
+export QWEN_API_KEY=your_key_here
+export OPENAI_COMPATIBLE_ENGINES='{
+  "qwen3_chat": {
+    "base_url": "https://your-qwen-endpoint.example.com/v1",
+    "model": "qwen3-32b",
+    "api_key_env": "QWEN_API_KEY"
+  },
+  "qwen3.5_chat": {
+    "base_url": "https://your-qwen-endpoint.example.com/v1",
+    "model": "qwen3.5-32b",
+    "api_key_env": "QWEN_API_KEY"
+  }
+}'
+python3 llm_plan_pipeline.py --task t1_zero --config blocksworld --engine qwen3_chat
+```
 
 For BLOOM:
 - Assign the cache dir of the model to the environment variable BLOOM_CACHE_DIR `BLOOM_CACHE_DIR=/path/to/bloom/cache/dir`

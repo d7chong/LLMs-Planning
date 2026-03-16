@@ -19,7 +19,7 @@ class ResponseEvaluator:
         self.engine = engine
         self.verbose = verbose
         self.ignore_existing = ignore_existing
-        self.specified_instances = specified_instances
+        self.specified_instances = set(specified_instances)
         self.translator_engine = translator_engine
         self.data = self.read_config(config_file)
         self.instance_dir = self.data['instance_dir']
@@ -80,11 +80,8 @@ class ResponseEvaluator:
                 if self.verbose:
                     print(f"Instance {instance_dict['instance_id']} response not generated")
                 return None, None, instance_dict["instance_id"]
-            if len(self.specified_instances) > 0:
-                if instance_dict['instance_id'] not in specified_instances:
-                    return None, None, instance_dict["instance_id"]
-                else:
-                    specified_instances.remove(instance_dict['instance_id'])      
+            if self.specified_instances and instance_dict['instance_id'] not in self.specified_instances:
+                return None, None, instance_dict["instance_id"]
             
             if self.verbose:
                 print(f"Evaluting instance {instance_dict['instance_id']}")
@@ -162,11 +159,8 @@ class ResponseEvaluator:
                     if self.verbose:
                         print(f"Instance {instance_dict['instance_id']} response not generated")
                     continue
-                if len(self.specified_instances) > 0:
-                    if instance_dict['instance_id'] not in specified_instances:
-                        continue
-                    else:
-                        specified_instances.remove(instance_dict['instance_id'])      
+                if self.specified_instances and instance_dict['instance_id'] not in self.specified_instances:
+                    continue
                 
                 if self.verbose:
                     print(f"Evaluting instance {instance_dict['instance_id']}")
@@ -207,11 +201,8 @@ class ResponseEvaluator:
                     if self.verbose:
                         print(f"Instance {instance_dict['instance_id']} response not generated")
                     continue
-                if len(self.specified_instances) > 0:
-                    if instance_dict['instance_id'] not in specified_instances:
-                        continue
-                    else:
-                        specified_instances.remove(instance_dict['instance_id'])      
+                if self.specified_instances and instance_dict['instance_id'] not in self.specified_instances:
+                    continue
                 
                 if self.verbose:
                     print(f"Evaluting instance {instance_dict['instance_id']}")

@@ -250,7 +250,7 @@ class PromptGenerator:
             if "unsolvable" in self.data["domain_name"]:
                 gt_plan_text = "unsolvable"
             else:
-                gt_plan_text = get_plan_as_text(self.data)
+                gt_plan_text = get_plan_as_text(self.data, plan_text=gt_plan)
             query += fill_template(*instance_to_text(problem, get_plan, self.data), instruction=True)
             # --------------------------------------------------------- #
             if self.verbose:
@@ -505,6 +505,5 @@ if __name__=="__main__":
         prompt_generator.task_1_plan_generation_zero_shot_pddl(specified_instances, random_example)
     else:
         raise NotImplementedError
-
 
 

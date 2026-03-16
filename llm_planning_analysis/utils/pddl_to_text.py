@@ -2,6 +2,23 @@
 
 import random
 
+
+def _normalize_plan_lines(plan_lines):
+    lines = [line.rstrip() for line in plan_lines if line.strip()]
+    if lines and lines[-1].startswith(";"):
+        lines = lines[:-1]
+    return lines
+
+
+def _get_plan_lines(plan_text=None, plan_file="sas_plan"):
+    if plan_text is not None:
+        return _normalize_plan_lines(plan_text.splitlines())
+    try:
+        with open(plan_file) as f:
+            return _normalize_plan_lines(f.readlines())
+    except FileNotFoundError:
+        return []
+
 def get_sorted(init_atoms):
     return sorted(init_atoms, key=lambda x: x.symbol.name + " " + " ".join([subterm.name for subterm in x.subterms]))
 
@@ -52,11 +69,9 @@ def parse_problem(problem, data, shuffle):
     GOAL = parse(goal_preds, OBJS)
 
     return INIT, GOAL
-
-
-
-
-def fill_template(INIT, GOAL, PLAN, data, zero_shot=False, o4=False):
+def fill_template(INIT, GOAL, PLAN, data, zero_shot=False, o4=False, instruction=None):
+    if instruction is not None:
+        zero_shot = instruction
     text = ""
     if INIT != "":
         text += "\n[STATEMENT]\n"
@@ -88,12 +103,12 @@ def instance_to_text(problem, get_plan, data, shuffle=False, plan=None):
 
     # ----------- PLAN TO TEXT ----------- #
     PLAN = ""
-    plan_file = "sas_plan"
     if get_plan:
         PLAN = "\n"
-        if plan==None:
-            with open(plan_file) as f:
-                plan = [line.rstrip() for line in f][:-1]
+        if plan is None:
+            plan = _get_plan_lines()
+        elif isinstance(plan, str):
+            plan = _get_plan_lines(plan_text=plan)
 
         for action in plan:
             action = action.strip("(").strip(")")
@@ -119,7 +134,7 @@ def instance_to_text(problem, get_plan, data, shuffle=False, plan=None):
 
 
 
-def get_plan_as_text(data, given_plan=None):
+def get_plan_as_text(data, given_plan=None, plan_text=None):
     OBJS = data['encoded_objects']
     PLAN = ""
     # print(given_plan)
@@ -130,10 +145,7 @@ def get_plan_as_text(data, given_plan=None):
             # PLAN += data['actions'][act_name].format(*objs) + "\n"
         return PLAN
 
-    plan_file = "sas_plan"
-    PLAN = ""
-    with open(plan_file) as f:
-        plan = [line.rstrip() for line in f][:-1]
+    plan = _get_plan_lines(plan_text=plan_text)
 
     for action in plan:
         action = action.strip("(").strip(")")
@@ -141,4 +153,3 @@ def get_plan_as_text(data, given_plan=None):
         PLAN += "(" + act_name + " " + " ".join(objs) + ")\n"
         # PLAN += data['actions'][act_name].format(*objs) + "\n"
     return PLAN
-

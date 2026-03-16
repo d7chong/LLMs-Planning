@@ -574,7 +574,13 @@ def text_to_plan_blocksworld(text, action_set, plan_file, data, ground_flag=Fals
         text = text.replace(src, dst)
     for raw_action, text_action in zip(raw_actions, text_actions):
         text = text.replace(text_action, raw_action)
-    object_names = [x.lower() for x in LD.values()]
+    object_alias_to_id = {}
+    for block_id, full_name in LD.items():
+        full_name = full_name.lower()
+        short_name = full_name.replace(" block", "")
+        object_alias_to_id[full_name] = block_id
+        object_alias_to_id[short_name] = block_id
+    object_names = sorted(object_alias_to_id.keys(), key=len, reverse=True)
 
     # ----------- GET PLAN FROM TEXT ----------- #
     plan = ""
@@ -584,7 +590,10 @@ def text_to_plan_blocksworld(text, action_set, plan_file, data, ground_flag=Fals
     for line in lines:
         if '[COST]' in line:
             break
-        line=line.replace('*','')
+        line = line.replace('*', '').replace('`', '').replace('_', '-')
+        for char in ['.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '{', '}', '<', '>', '=']:
+            line = line.replace(char, ' ')
+        line = " ".join(line.split())
 
         # Extracting actions
         action_list = [action in line.split() for action in raw_actions]
@@ -599,7 +608,7 @@ def text_to_plan_blocksworld(text, action_set, plan_file, data, ground_flag=Fals
         if len(objs) != n_objs:
             continue
         readable_objs = [obj.replace(' block', '') for obj in objs]
-        objs = [BD[x] for x in objs]
+        objs = [object_alias_to_id[x] for x in objs]
         readable_action = "({} {})".format(action, " ".join(readable_objs[:n_objs + 1]))
         if not ground_flag:
             action = "({} {})".format(action, " ".join(objs[:n_objs + 1]))
@@ -617,12 +626,10 @@ def text_to_plan_blocksworld(text, action_set, plan_file, data, ground_flag=Fals
             for char in ['.', ',', ';', ':', '!', '?', '(', ')', '[', ']', '{', '}', '<', '>', '=', '+', '-', '*', '/']:
                 line = line.replace(char, '')
             action_list = [action in line.split() for action in raw_actions]
-            print(line.split(), raw_actions)
             if sum(action_list) == 0:
                 continue
             # TODO: Handle GPT-3 text that can't be parsed as an action
             action = raw_actions[np.where(action_list)[0][0]]
-            print(action)
     # print(f"[+]: Saving plan in {plan_file}")
     file = open(plan_file, "wt")
     file.write(plan)

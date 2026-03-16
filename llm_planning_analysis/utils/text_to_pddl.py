@@ -553,12 +553,25 @@ def text_to_plan_blocksworld(text, action_set, plan_file, data, ground_flag=Fals
     text_actions = [AD[x] for x in raw_actions]
 
     text = text.lower().strip()
+    had_plan_block = '[plan]' in text
     if "### plan:" in text:
         text = text.split("### plan:")[1]
-    if '[plan]' in text:
+    if had_plan_block:
         text = text.split('[plan]')[1]
         if '[plan end]' in text:
             text = text.split('[plan end]')[0]
+    # Normalize common action-name variants before matching.
+    replacements = {
+        "pick up": "pick-up",
+        "pickup": "pick-up",
+        "put down": "put-down",
+        "putdown": "put-down",
+        "stack on top of": "stack",
+        "stack on": "stack",
+        "unstack from": "unstack",
+    }
+    for src, dst in replacements.items():
+        text = text.replace(src, dst)
     for raw_action, text_action in zip(raw_actions, text_actions):
         text = text.replace(text_action, raw_action)
     object_names = [x.lower() for x in LD.values()]
@@ -595,7 +608,7 @@ def text_to_plan_blocksworld(text, action_set, plan_file, data, ground_flag=Fals
 
         plan += f"{action}\n"
         readable_plan += f"{readable_action}\n"
-    if len(plan) == 0:
+    if len(plan) == 0 and not had_plan_block:
         for line in lines:
             if '[COST]' in line:
                 break
